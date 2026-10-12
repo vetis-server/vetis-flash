@@ -1,5 +1,7 @@
 # vetis-flash
 
+[![Crates.io downloads](https://img.shields.io/crates/d/vetis-flash)](https://crates.io/crates/vetis-flash) [![crates.io](https://img.shields.io/crates/v/vetis-flash?style=flat-square)](https://crates.io/crates/vetis-flash) [![Build Status](https://github.com/vetis-server/vetis-flash/actions/workflows/rust.yml/badge.svg?event=push)](https://github.com/vetis-server/vetis-flash/actions/workflows/rust.yml) ![Crates.io MSRV](https://img.shields.io/crates/msrv/vetis-flash) [![Documentation](https://docs.rs/vetis-flash/badge.svg)](https://docs.rs/vetis-flash/latest/vetis-flash) [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/vetis-server/vetis-flash/blob/main/LICENSE.md)  [![codecov](https://codecov.io/gh/vetis-server/vetis-flash/graph/badge.svg?token=T0HSBAPVSI)](https://codecov.io/gh/vetis-server/vetis-flash)
+
 Static file serving support for the vetis HTTP server framework. This module provides efficient static file serving with configurable caching, support for multiple async runtimes, and flexible path configuration.
 
 ## Features
