@@ -19,7 +19,6 @@ runtime-tokio = ["dep:vetis-tokio", "dep:tokio"]
 [dependencies]
 http = "1.5.0"
 hyper-body-utils = { version = "0.1.18", default-features = false }
-log = "0.4.34"
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.53.1", optional = true }
 typetag = "0.2.21"
