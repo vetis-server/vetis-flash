@@ -2125,7 +2125,6 @@ dependencies = [
  "deboa-tokio",
  "http",
  "hyper-body-utils",
- "log",
  "serde",
  "serde_yaml_ng",
  "tokio",
