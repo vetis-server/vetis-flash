@@ -30,58 +30,36 @@ Choose the appropriate runtime feature for your project:
 Configure static file serving using the builder pattern:
 
 ```rust,ignore
-use vetis_static::StaticHookConfig;
-use std::time::Duration;
+use vetis_flash::FlashHookConfig;
+use vetis_matchers::request::{PathMatcher, PathMatcherConfig};
 
-let config = StaticHookConfig::builder()
-    .uri("/static")
-    .extensions(r"\.(html|css|js|png|jpg)$")
-    .directory("./public")
-    .index_files(vec!["index.html".to_string()])
-    .cache(
-        vetis_static::StaticHookCache::builder()
-            .max_file_size(10 * 1024 * 1024) // 10MB
-            .ttl(Duration::from_secs(60))
-            .tti(Duration::from_secs(10))
-            .capacity(1000)
-            .build()
-    )
+let config = FlashHookConfig::builder()
+    .matcher(PathMatcher::new(
+        PathMatcherConfig::builder()
+            .add_path("/flash*")
+            .build()?,
+    ))
+    .response(r"Hello from VeTiS!")
     .build()?;
 ```
 
 ### vetis.yaml
 
 ```yaml
-type: static_path
-uri: /static
-extensions: \.(html|css|js|png|jpg)$
-directory: ./public
-index_files: [index.html]
-cache:
-    max_file_size: 10485760
-    ttl: 60s
-    tti: 10s
-    capacity: 1000
+type: flash
+matcher:
+  type: "path"
+  paths:
+    - "/flash*"
+response: "Hello from VeTiS!"
 ```
 
 ### Configuration Options
 
-#### StaticHookConfig
+#### FlashHookConfig
 
-- **uri**: The URI prefix for serving static files (required)
-- **extensions**: Comma-separated list of file extensions to serve (required)
-- **directory**: The filesystem directory containing static files (required)
-- **index_files**: Optional list of index file names to serve for directory requests
-- **cache**: Optional cache configuration
-
-#### StaticHookCache
-
-- **max_file_size**: Maximum file size to cache in bytes (default: 10MB)
-- **ttl**: Time-to-live for cached entries (default: 60s)
-- **tti**: Time-to-idle for cached entries (default: 10s)
-- **capacity**: Maximum number of cached files (default: 1000)
-
-Duration fields support the string format from the `duration-str` crate (e.g., "60s", "5m", "1h").
+- **matcher**: If set, this hook will be only called if request meet the criteria defined by him, otherwise, all requests will call this hook (optional)
+- **response**: Server response content
 
 ## Runtime-Specific Modules
 
