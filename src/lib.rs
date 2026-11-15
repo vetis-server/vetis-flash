@@ -1,11 +1,11 @@
+use crate::tokio::FlashHook;
 use serde::{Deserialize, Serialize};
 use vetis::{
-    VetisResult,
+    Str, VetisHook, VetisResult,
     errors::{ConfigError, VetisError},
-    host::path::{Path, PathConfig},
+    hook::HookConfig,
+    matcher::MatcherConfig,
 };
-
-use crate::tokio::FlashPath;
 
 #[cfg(feature = "runtime-tokio")]
 /// Tokio runtime support module
@@ -14,24 +14,32 @@ pub mod tokio;
 #[cfg(test)]
 mod tests;
 
-/// Builder for creating `FlashPathConfig` instances.
-pub struct FlashPathConfigBuilder {
-    uri: String,
-    response: Option<String>,
-    template: Option<String>,
-    enable_cache: bool,
+/// Builder for creating `FlashHookConfig` instances.
+pub struct FlashHookConfigBuilder {
+    matcher: Option<Box<dyn MatcherConfig>>,
+    response: Option<Str>,
+    template: Option<Str>,
     status_code: u16,
-    headers: Option<Vec<(String, String)>>,
+    headers: Option<Vec<(Str, Str)>>,
 }
 
-impl FlashPathConfigBuilder {
-    /// Allow set the URI of static path.
+impl FlashHookConfigBuilder {
+    /// Add a Matcher to hook
     ///
-    /// # Returns
+    /// # Arguments
     ///
-    /// * `Self` - The builder.
-    pub fn uri(mut self, uri: &str) -> Self {
-        self.uri = uri.to_string();
+    /// * `matcher` - Matcher configuration
+    ///
+    /// # Notes
+    ///
+    /// Add a Matcher configuration to the hook, matchers are
+    /// useful to add determine if a particular hook will
+    /// be used.
+    pub fn matcher<M>(mut self, matcher: M) -> Self
+    where
+        M: MatcherConfig + 'static,
+    {
+        self.matcher = Some(Box::new(matcher));
         self
     }
 
@@ -51,17 +59,7 @@ impl FlashPathConfigBuilder {
     ///
     /// * `Self` - The builder.
     pub fn template(mut self, template: &str) -> Self {
-        self.template = Some(template.to_string());
-        self
-    }
-
-    /// Allow enable cache for flash path.
-    ///
-    /// # Returns
-    ///
-    /// * `Self` - The builder.
-    pub fn enable_cache(mut self, enable: bool) -> Self {
-        self.enable_cache = enable;
+        self.template = Some(template.into());
         self
     }
 
@@ -80,20 +78,17 @@ impl FlashPathConfigBuilder {
     /// # Returns
     ///
     /// * `Self` - The builder.
-    pub fn headers(mut self, heders: Vec<(String, String)>) -> Self {
+    pub fn headers(mut self, heders: Vec<(Str, Str)>) -> Self {
         self.headers = Some(heders);
         self
     }
 
-    /// Build the `StaticPathConfig` with the configured settings.
+    /// Build the `StaticHookConfig` with the configured settings.
     ///
     /// # Returns
     ///
-    /// * `VetisResult<FlashConfig>` - The `StaticPathConfig` with the configured settings.
-    pub fn build(self) -> VetisResult<FlashPathConfig> {
-        if self.uri.is_empty() {
-            return Err(VetisError::Config(ConfigError::Path("URI cannot be empty".to_string())));
-        }
+    /// * `VetisResult<FlashConfig>` - The `StaticHookConfig` with the configured settings.
+    pub fn build(self) -> VetisResult<FlashHookConfig> {
         if self
             .response
             .is_none()
@@ -101,76 +96,65 @@ impl FlashPathConfigBuilder {
                 .template
                 .is_none()
         {
-            return Err(VetisError::Config(ConfigError::Path(
-                "You must provide response or template file".to_string(),
+            return Err(VetisError::Config(ConfigError::Hook(
+                "You must provide response or template file".into(),
             )));
         }
 
-        Ok(FlashPathConfig {
-            uri: self.uri,
+        Ok(FlashHookConfig {
+            matcher: self
+                .matcher
+                .map_or(None, |val| Some(val)),
             response: self.response,
             template: self.template,
-            enable_cache: self.enable_cache,
             status_code: self.status_code,
-            headers: self.headers,
+            headers: self
+                .headers
+                .map_or(None, |val| Some(val.into_boxed_slice())),
         })
     }
 }
 
 /// Configuration for static file serving.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct FlashPathConfig {
-    uri: String,
-    response: Option<String>,
-    template: Option<String>,
-    enable_cache: bool,
+pub struct FlashHookConfig {
+    matcher: Option<Box<dyn MatcherConfig>>,
+    response: Option<Str>,
+    template: Option<Str>,
     status_code: u16,
-    headers: Option<Vec<(String, String)>>,
+    headers: Option<Box<[(Str, Str)]>>,
 }
 
 #[typetag::serde(name = "flash")]
-impl PathConfig for FlashPathConfig {
-    fn uri(&mut self, uri: &str) {
-        self.uri = uri.to_string();
+impl HookConfig for FlashHookConfig {
+    fn matcher(&self) -> Option<&Box<dyn MatcherConfig>> {
+        self.matcher
+            .as_ref()
     }
 
-    fn boxed_clone(&self) -> Box<dyn PathConfig> {
+    fn boxed_clone(&self) -> Box<dyn HookConfig> {
         Box::new(self.clone())
     }
 
-    fn boxed_path(&self) -> Box<dyn Path> {
-        Box::new(FlashPath::new(self.clone()))
-    }
-
-    fn boxed_sync(&self) -> Box<dyn Path + Send + Sync> {
-        Box::new(FlashPath::new(self.clone()))
+    fn boxed_hook(&self) -> Box<dyn VetisHook> {
+        Box::new(FlashHook::new(self.clone()))
     }
 }
 
-impl FlashPathConfig {
-    /// Allow create a new `FlashPathConfigBuilder` with default settings.
+impl FlashHookConfig {
+    /// Allow create a new `FlashHookConfigBuilder` with default settings.
     ///
     /// # Returns
     ///
-    /// * `StaticPathConfigBuilder` - The builder.
-    pub fn builder() -> FlashPathConfigBuilder {
-        FlashPathConfigBuilder {
-            uri: "/".to_string(),
+    /// * `StaticHookConfigBuilder` - The builder.
+    pub fn builder() -> FlashHookConfigBuilder {
+        FlashHookConfigBuilder {
+            matcher: None,
             response: None,
             template: None,
-            enable_cache: false,
             status_code: 200,
             headers: None,
         }
-    }
-
-    /// Returns uri
-    ///
-    /// # Returns
-    ///
-    /// * `&str` - The uri.
-    pub fn uri(&self) -> &str {
-        &self.uri
     }
 
     /// Returns response
@@ -178,7 +162,7 @@ impl FlashPathConfig {
     /// # Returns
     ///
     /// * `&str` - The response.
-    pub fn response(&self) -> &Option<String> {
+    pub fn response(&self) -> &Option<Str> {
         &self.response
     }
 
@@ -187,17 +171,8 @@ impl FlashPathConfig {
     /// # Returns
     ///
     /// * `&str` - The template.
-    pub fn template(&self) -> &Option<String> {
+    pub fn template(&self) -> &Option<Str> {
         &self.template
-    }
-
-    /// Returns if cache is enabled or not
-    ///
-    /// # Returns
-    ///
-    /// * `bool` - True if cache is enabled, false otherwise.
-    pub fn enable_cache(&self) -> bool {
-        self.enable_cache
     }
 
     /// Returns status code
@@ -214,7 +189,7 @@ impl FlashPathConfig {
     /// # Returns
     ///
     /// * `&Option<Vec<String, String>>` - The headers.
-    pub fn headers(&self) -> &Option<Vec<(String, String)>> {
+    pub fn headers(&self) -> &Option<Box<[(Str, Str)]>> {
         &self.headers
     }
 }

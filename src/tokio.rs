@@ -1,21 +1,31 @@
-use crate::FlashPathConfig;
+use crate::FlashHookConfig;
+use cel::Context;
+use http::StatusCode;
 use hyper_body_utils::HttpBody;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use upon::value;
 use vetis::{
-    Request, Response, VetisFutureResult,
-    errors::{ContentError, HostError, VetisError},
-    host::{HostContext, path::Path},
+    Request,
+    errors::RuntimeError,
+    hook::{Hook, HookConfig, HookPhase},
+    matcher::Matcher,
+};
+use vetis_tokio::{
+    Response, VetisFutureResult,
+    errors::{HostError, VetisError},
 };
 
 /// Static path
-pub struct FlashPath {
-    config: FlashPathConfig,
-    cached_template: Option<String>,
+pub struct FlashHook {
+    matcher: Option<Box<dyn Matcher>>,
+    config: FlashHookConfig,
 }
 
-impl FlashPath {
+unsafe impl Send for FlashHook {}
+unsafe impl Sync for FlashHook {}
+
+impl FlashHook {
     /// Create a new static path with provided configuration
     ///
     /// # Arguments
@@ -24,51 +34,58 @@ impl FlashPath {
     ///
     /// # Returns
     ///
-    /// * `StaticPath` - The static path
-    pub fn new(config: FlashPathConfig) -> FlashPath {
-        FlashPath { config, cached_template: None }
+    /// * `FlashHook` - The static path
+    pub fn new(config: FlashHookConfig) -> FlashHook {
+        let matcher = if let Some(matcher_config) = config.matcher() {
+            Some(matcher_config.boxed_matcher())
+        } else {
+            None
+        };
+        FlashHook { matcher, config }
     }
 }
 
-impl Path for FlashPath {
-    /// Returns the uri of flash path
-    ///
-    /// # Returns
-    ///
-    /// * `&str` - The uri of flash path
-    fn uri(&self) -> &str {
-        self.config.uri()
+impl Hook for FlashHook {
+    fn has_matches(&self, context: &Context) -> bool {
+        if let Some(matcher) = &self.matcher { matcher.is_match(context) } else { true }
     }
 
-    /// Handles the request for the static path
-    ///
-    /// # Returns
-    ///
-    /// * `VetisFutureResult<'a, Response>` - The response to the request
+    fn phase(&self) -> &HookPhase {
+        &HookPhase::Content
+    }
+
+    fn matcher_mut(&mut self) -> Option<&mut Box<dyn Matcher>> {
+        self.matcher
+            .as_mut()
+    }
+
     fn handle<'a>(
         &'a self,
-        _request: Request,
-        host_context: HostContext,
-    ) -> VetisFutureResult<'a, Response> {
-        Box::pin(async move {
-            if let Some(response) = self
+        request: Request,
+        _response: Option<Response>,
+    ) -> VetisFutureResult<'a, (Request, Option<Response>)> {
+        let future = async move {
+            if let Some(content) = self
                 .config
                 .response()
             {
-                return Ok(Response::builder()
-                    .status(http::StatusCode::OK)
-                    .body(HttpBody::text(response)));
+                let response = Some(
+                    Response::builder()
+                        .status(http::StatusCode::OK)
+                        .body(HttpBody::text(content)),
+                );
+                return Ok((request, response));
             } else if let Some(template) = self
                 .config
                 .template()
             {
-                let template_path = std::path::Path::new(template);
+                let template_path = Path::new(template);
                 let full_template_path = if template_path.is_relative() {
-                    if let Some(root_dir) = host_context.root_directory() {
+                    if let Some(root_dir) = request.root_directory() {
                         PathBuf::from_iter([root_dir, template_path])
                     } else {
-                        return Err(VetisError::Host(HostError::Content(ContentError::NotFound(
-                            "Root directory undefined".to_string(),
+                        return Err(VetisError::Host(HostError::Runtime(RuntimeError::new(
+                            "Root directory undefined",
                         ))));
                     }
                 } else {
@@ -76,40 +93,42 @@ impl Path for FlashPath {
                 };
 
                 let template = fs::read_to_string(full_template_path)
-                        .await
-                        .map_err(|e| {
-                            VetisError::Host(HostError::Content(ContentError::ServerError(
-                                e.to_string(),
-                            )))
-                        })?;
+                    .await
+                    .map_err(|e| {
+                        VetisError::Host(HostError::Runtime(RuntimeError::new(&e.to_string())))
+                    })?;
 
                 let mut engine = upon::Engine::new();
                 engine
                     .add_template("main", template)
                     .map_err(|e| {
-                        VetisError::Host(HostError::Content(ContentError::ServerError(
-                            e.to_string(),
-                        )))
+                        VetisError::Host(HostError::Runtime(RuntimeError::new(&e.to_string())))
                     })?;
 
                 let output = engine
                     .template("main")
-                    .render(value! {})
+                    .render(value! { title: "Vetis!" })
                     .to_string()
                     .map_err(|e| {
-                        VetisError::Host(HostError::Content(ContentError::ServerError(
-                            e.to_string(),
-                        )))
+                        println!("Error {}", e.to_string());
+                        VetisError::Host(HostError::Runtime(RuntimeError::new(&e.to_string())))
                     })?;
 
-                return Ok(Response::builder()
-                    .status(http::StatusCode::OK)
-                    .body(HttpBody::text(&output)));
+                let response = Some(
+                    Response::builder()
+                        .status(http::StatusCode::OK)
+                        .body(HttpBody::text(&output)),
+                );
+
+                return Ok((request, response));
             }
 
-            Err(VetisError::Host(HostError::Content(ContentError::NotFound(
-                "Invalid flash content, must be either response or template.".into(),
-            ))))
-        })
+            Err(VetisError::Host(HostError::Runtime(
+                RuntimeError::new("Invalid flash content, must be either response or template.")
+                    .with_status_code(StatusCode::NOT_FOUND),
+            )))
+        };
+
+        Box::pin(future)
     }
 }
