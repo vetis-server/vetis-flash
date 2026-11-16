@@ -29,7 +29,7 @@ mod tokio {
 
     #[tokio::test]
     async fn test_from_file() -> VetisTestResult<()> {
-        let config_path = Path::new("files/vetis-flash.yaml");
+        let config_path = Path::new("files/public/vetis-flash.yaml");
         expect(config_path.exists()).to_be(truthy());
 
         let file = read_to_string(&config_path)
