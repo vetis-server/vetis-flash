@@ -8,7 +8,7 @@ use upon::value;
 use vetis::{
     Request,
     errors::RuntimeError,
-    hook::{Hook, HookConfig, HookPhase},
+    hook::{Hook, HookConfig, HookPhase, HookPhases},
     matcher::Matcher,
 };
 use vetis_tokio::{
@@ -50,8 +50,8 @@ impl Hook for FlashHook {
         if let Some(matcher) = &self.matcher { matcher.is_match(context) } else { true }
     }
 
-    fn phase(&self) -> &HookPhase {
-        &HookPhase::Content
+    fn phases(&self) -> HookPhases {
+        HookPhases::new(HookPhase::Content)
     }
 
     fn matcher_mut(&mut self) -> Option<&mut Box<dyn Matcher>> {

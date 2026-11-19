@@ -33,14 +33,14 @@ Configure static file serving using the builder pattern:
 use vetis_flash::FlashHookConfig;
 use vetis_matchers::request::{PathMatcher, PathMatcherConfig};
 
-let config = FlashHookConfig::builder()
-    .matcher(PathMatcher::new(
-        PathMatcherConfig::builder()
-            .add_path("/flash*")
-            .build()?,
-    ))
-    .response(r"Hello from VeTiS!")
-    .build()?;
+FlashHookConfig::builder()
+  .matcher(PathMatcher::new(
+      PathMatcherConfig::builder()
+          .add_path("/flash*")
+          .build()?,
+  ))
+  .response(r"Hello from VeTiS!")
+  .build()?;
 ```
 
 ### vetis.yaml
