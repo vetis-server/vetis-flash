@@ -24,7 +24,7 @@ pub struct FlashHookConfigBuilder {
 }
 
 impl FlashHookConfigBuilder {
-    /// Add a Matcher to hook
+    /// Allow set a matcher to hook
     ///
     /// # Arguments
     ///

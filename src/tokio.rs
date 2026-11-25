@@ -8,7 +8,7 @@ use upon::value;
 use vetis::{
     Request,
     errors::RuntimeError,
-    hook::{Hook, HookConfig, HookPhase, HookPhases},
+    hook::{Hook, HookConfig, HookPhase},
     matcher::Matcher,
 };
 use vetis_tokio::{
@@ -36,22 +36,32 @@ impl FlashHook {
     ///
     /// * `FlashHook` - The static path
     pub fn new(config: FlashHookConfig) -> FlashHook {
-        let matcher = if let Some(matcher_config) = config.matcher() {
-            Some(matcher_config.boxed_matcher())
-        } else {
-            None
-        };
-        FlashHook { matcher, config }
+        FlashHook { matcher: None, config }
     }
 }
 
 impl Hook for FlashHook {
+    fn setup<'a>(&'a mut self) -> VetisFutureResult<'a, ()> {
+        Box::pin(async move {
+            let matcher = if let Some(matcher_config) = self
+                .config
+                .matcher()
+            {
+                Some(matcher_config.boxed_matcher())
+            } else {
+                None
+            };
+            self.matcher = matcher;
+            Ok(())
+        })
+    }
+
     fn has_matches(&self, context: &Context) -> bool {
         if let Some(matcher) = &self.matcher { matcher.is_match(context) } else { true }
     }
 
-    fn phases(&self) -> HookPhases {
-        HookPhases::new(HookPhase::Content)
+    fn phase(&self) -> HookPhase {
+        HookPhase::Content
     }
 
     fn matcher_mut(&mut self) -> Option<&mut Box<dyn Matcher>> {
@@ -110,7 +120,6 @@ impl Hook for FlashHook {
                     .render(value! { title: "Vetis!" })
                     .to_string()
                     .map_err(|e| {
-                        println!("Error {}", e.to_string());
                         VetisError::Host(HostError::Runtime(RuntimeError::new(&e.to_string())))
                     })?;
 
